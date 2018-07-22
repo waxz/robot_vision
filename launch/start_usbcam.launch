@@ -1,0 +1,14 @@
+<launch>
+	<!-- The nodelet manager -->
+	<node pkg="nodelet" type="nodelet" name="image_nodelet" args="manager">
+		<remap from="/cv_camera/image_raw" to="/camera/image" />
+		<param name="device_id" value="/dev/video0" />
+	</node>
+
+	<!-- The camera nodelet -->
+	<node pkg="nodelet" type="nodelet" name="cv_camera" args="load cv_camera/CvCameraNodelet image_nodelet">
+	</node>
+
+	<node pkg="robot_vision" type="robot_vision_node" name="robot_vision_node"/>
+
+</launch>

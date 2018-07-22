@@ -20,7 +20,7 @@ private:
     image_transport::Publisher image_pub_;
     image_transport::Publisher image_pub2_;
 
-    void imageCb(const sensor_msgs::Image::ConstPtr &msg);
+    void image_callback(const sensor_msgs::Image::ConstPtr &msg);
 
     bool matToimage(cv::Mat &frame, sensor_msgs::ImagePtr &msg);
 
@@ -38,7 +38,7 @@ OpenCVWebCam::OpenCVWebCam() : it_(nh_) {
 
     // Subscrive to input video feed and publish output video feed
     image_sub_ = it_.subscribe("/camera/image_raw", 1,
-                               &OpenCVWebCam::imageCb, this);
+                               &OpenCVWebCam::image_callback, this);
     image_pub_ = it_.advertise("/camera/image_raw", 1);
     image_pub2_ = it_.advertise("/camera/image", 1);
 
@@ -116,7 +116,7 @@ void OpenCVWebCam::start_record() {
 }
 
 
-void OpenCVWebCam::imageCb(const sensor_msgs::Image::ConstPtr &msg) {
+void OpenCVWebCam::image_callback(const sensor_msgs::Image::ConstPtr &msg) {
     ROS_INFO("get image");
     cv_bridge::CvImagePtr cv_ptr;
 
