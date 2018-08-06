@@ -93,3 +93,9 @@ using as nodelet
 
 5.
 https://github.com/ros-drivers/video_stream_opencv.git
+
+6. line fitting and display in gui
+
+7.webcam on iphone
+https://github.com/shenyaocn/IP-Camera-Bridge.git
+python test_video_resource.py http://admin:admin@192.168.0.120:8081/video
