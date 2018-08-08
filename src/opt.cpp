@@ -7,9 +7,16 @@
 #include <cpp_utils/parse.h>
 #include <cpp_utils/types.h>
 #include <cpp_utils/container.h>
+#include <cpp_utils/svdlinefitting.h>
 #include <sensor_msgs/LaserScan.h>
 #include <ros/ros.h>
 
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include "opencv2/imgproc/imgproc.hpp"
+
+
+#include <boost/bind.hpp>
 #include <vector>
 #include <valarray>
 using std::cout;
@@ -18,7 +25,15 @@ using std::vector;
 using std::valarray;
 
 namespace sm=sensor_msgs;
+
+void f(int x) {
+    printf("xx = %d \n", x);
+}
+
+
+
 int main(int argc, char **argv) {
+    time_util::Timer timer;
 
 
 #if 0
@@ -39,16 +54,22 @@ int main(int argc, char **argv) {
     // laser to mat
     // first remove independent points
     auto laserRanges = container_util::createValarrayFromVector((*scan_data__).ranges);
-    auto size = (*scan_data__).ranges.size();
-    valarray<float> laserAngles(size);
+    auto lasersize = (*scan_data__).ranges.size();
+    valarray<float> laserAngles(lasersize);
     float angle_min = (*scan_data__).angle_min;
     float incre = (*scan_data__).angle_increment;
-    for(int i=0;i<size;i++){
+    for(int i=0;i<lasersize;i++){
         laserAngles[i] = angle_min+i*incre;
     }
 
     valarray<float> laserXs = laserRanges*cos(laserAngles);
     valarray<float> laserYs = laserRanges*sin(laserAngles);
+
+    // plot all points to mat
+    valarray<float> dataXs;
+    valarray<float> dataYs ;
+
+    // plot
 
 
 
@@ -61,7 +82,14 @@ int main(int argc, char **argv) {
 
     valarray<float> maskXs = laserXs[mask];
     valarray<float> maskYs = laserYs[mask];
-    size = maskYs.size();
+
+    // plot
+
+
+
+
+
+    int size = maskYs.size();
 
     valarray<float> maskXsL = maskXs[std::slice(0, size - 1, 1)];
     valarray<float> maskXsR = maskXs[std::slice(1, size - 1, 1)];
@@ -86,94 +114,129 @@ int main(int argc, char **argv) {
 
     // push all point to a vector
     vector<type_util::Point2d> continiousPoints;
-    int distMin_ = 5;
+    int distMin_ = 4;
     vector<float> continiousPointsYs;
 
     vector<float> continiousPointsXs;
     double x,y;
     type_util::Point2d p;
     for(int i=0;i<edgeDist.size();i++){
-        if(edgeDist[i]>distMin_){
-            for(int j = edgeIds[i]+1;j<edgeIds[i+1];j++){
+        int startId , endId;
+        bool getLine = false;
+        if(i==0){
+            if(edgeIds[i] >distMin_){
+                getLine = true;
+                startId = 0;
+                endId = edgeIds[i];
+                if(getLine){
+                    for(int j = startId;j<endId;j++){
 
-                p.x =  maskXsL[j];
-                p.y = maskYsL[j];
-                continiousPointsXs.push_back(p.x);
-                continiousPointsYs.push_back(p.y);
+                        p.x =  maskXsL[j];
+                        p.y = maskYsL[j];
+                        continiousPointsXs.push_back(p.x);
+                        continiousPointsYs.push_back(p.y);
 
-                continiousPoints.push_back(p);
+                        continiousPoints.push_back(p);
+                    }
+                }
             }
         }
+        if(i==edgeDist.size()-1){
+            if(Ids.size() - edgeIds[edgeIds.size()-1] >distMin_){
+                getLine = true;
+                startId = edgeIds[i];
+                endId = Ids.size();
+                if(getLine){
+                    for(int j = startId;j<endId;j++){
+
+                        p.x =  maskXsL[j];
+                        p.y = maskYsL[j];
+                        continiousPointsXs.push_back(p.x);
+                        continiousPointsYs.push_back(p.y);
+
+                        continiousPoints.push_back(p);
+                    }
+                }
+            }
+        }
+
+
+
+        if(edgeDist[i]>distMin_){
+            getLine= true;
+            startId = edgeIds[i]+1;
+            endId = edgeIds[i+1];
+            if(getLine){
+                for(int j = startId;j<endId;j++){
+
+                    p.x =  maskXsL[j];
+                    p.y = maskYsL[j];
+                    continiousPointsXs.push_back(p.x);
+                    continiousPointsYs.push_back(p.y);
+
+                    continiousPoints.push_back(p);
+                }
+            }
+
+        }
+
+
     }
 
     // find xmax,xmin,ymax,ymin
     auto continiousPointsXs_tmp = container_util::createValarrayFromVector(continiousPointsXs);
     auto continiousPointsYs_tmp = container_util::createValarrayFromVector(continiousPointsYs);
+
+
+    // plot
+    // ============================================
+    dataXs = continiousPointsXs_tmp;
+
+    dataYs = continiousPointsYs_tmp;
+
     double normXmin, normYmin, normXmax,normYmax;
-    normXmin = continiousPointsXs_tmp.min();
-    normXmax = continiousPointsXs_tmp.max();
-    normYmin = continiousPointsYs_tmp.min();
-    normYmax = continiousPointsYs_tmp.max();
+    normXmin = dataXs.min();
+    normXmax = dataXs.max();
+    normYmin = dataYs.min();
+    normYmax = dataYs.max();
     double normXlen = normXmax - normXmin;
     double normYlen = normYmax - normYmin;
-
-
     int resolution_ = 100;
-    int width = int(100*(normXmax - normXmin));
-    int height = int(100*(normYmax - normYmin));
+    int height= int(resolution_*(normXmax - normXmin));
+    int width = int(resolution_*(normYmax - normYmin));
+    cv::Mat grid(1*height, 1*width, CV_8U,255);
+    printf("w h = %d,%d\n",width,height);
 
-
-    cv::Mat grid(height, width, CV_8U,255);
-
-    size = continiousPoints.size();
     int idx ,idy;
-    for(int i=0;i<size;i++){
+    for(int i=0;i<dataYs.size();i++){
 
-        idx = std::max(0,int((continiousPoints[i].x-normXmin )*(width-1)/normXlen));
-        idy = std::max(0,int((continiousPoints[i].y-normYmin )*(height-1)/normYlen));
+        idx = int(resolution_*(dataXs[i] - normXmin));
+        idy = int(resolution_*(dataYs[i] - normYmin));
 
-        grid.at<uchar>(idx, idy) = 0;
+        printf("id %d,%d\n",idx,idy);
+        grid.at<uchar>(idy ,idx) = 0;
 
 
     }
-    // convert point to Mat
 
 
-    cv::imshow("source", grid);
+#if 0
+    cv::GaussianBlur(grid, grid, cv::Size(3, 3), 5);
+
+
+    adaptiveThreshold(grid, grid, 255, CV_ADAPTIVE_THRESH_MEAN_C, cv::THRESH_BINARY, 15, 10);
+    cv::imshow("dataXs dataYs",grid);
+#endif
+    // ============================================
+
+
+
 
 #endif
 
 
+#if 0
 
-
-
-    // finally get [startId,endId] vector
-
-
-    //push all points to SelectPoints
-
-    // convert selectPoints to Mat
-
-
-
-
-
-
-
-    // window filter
-
-
-
-    // select region
-    // convert to Mat
-    // normalise range
-
-
-
-
-#if 1
-    time_util::Timer timer;
-    timer.start();
 
     // 'm' is the number of data points.
     int m = 100;
@@ -201,6 +264,10 @@ int main(int argc, char **argv) {
         grid.at<uchar>(idxj, idxi) = 0;
 
     }
+#endif
+#if 0
+    timer.start();
+
     printf("point to mat time %f ms\n", timer.elapsedMicroseconds() / 1000.0);
 
 
@@ -208,8 +275,7 @@ int main(int argc, char **argv) {
     cv::Mat dst = grid.clone();
 
     //Apply blur to smooth edges and use adapative thresholding
-    cv::Size size(3, 3);
-    cv::GaussianBlur(dst, dst, size, 5);
+    cv::GaussianBlur(dst, dst,  cv::Size(3,3), 9);
 
 
     adaptiveThreshold(dst, dst, 255, CV_ADAPTIVE_THRESH_MEAN_C, cv::THRESH_BINARY, 15, 10);
@@ -238,7 +304,10 @@ int main(int argc, char **argv) {
     vector<cv::Vec4i> lines;
 
 
-    HoughLinesP(dst, lines, 1, CV_PI / 100, 50, 80, 1);
+    auto detectMat  = dst;
+    HoughLinesP(detectMat, lines, 1, CV_PI / 100, 10, 12, 1);
+    //    HoughLinesP(dst, lines, 1, CV_PI / 100, 50, 80, 1);
+
 
     int sz = int(lines.size());
     printf("get line = %d\n", sz);
@@ -264,58 +333,55 @@ int main(int argc, char **argv) {
 
     cv::imshow("detected lines", cdst);
 
-
+    cv::waitKey();
 #endif
 
 
-    cv::waitKey();
-
-
-#if 0
+#if 1
+    // 'm' is the number of data points.
+    int m = 100;
+    vector<type_util::Point2d> LinePoints;
+    Point2DVector Points = opt_util::SampleGen(-1, 1, m);
     // Move the data into an Eigen Matrix.
     // The first column has the input values, x. The second column is the f(x) values.
     Eigen::MatrixXd measuredValues(m, 2);
     for (int i = 0; i < m; i++) {
         measuredValues(i, 0) = Points[i](0);
         measuredValues(i, 1) = Points[i](1);
+        if (i < 0.5 * m)
+            LinePoints.push_back(type_util::Point2d(Points[i](0), Points[i](1)));
     }
 
-
-// 'n' is the number of parameters in the function.
-    // f(x) = a(x^2) + b(x) + c has 3 parameters: a, b, c
-    int n = 3;
-
-    // 'x' is vector of length 'n' containing the initial values for the parameters.
-    // The parameters 'x' are also referred to as the 'inputs' in the context of LM optimization.
-    // The LM optimization inputs should not be confused with the x input values.
-    Eigen::VectorXd x(n);
+    Eigen::VectorXd x(3);
     x(0) = 0.0;             // initial value for 'a'
     x(1) = 1.0;             // initial value for 'b'
     x(2) = 0.5;             // initial value for 'c'
 
 
+    opt_util::SimpleSolver<opt_util::LineFunctor> sm;
+    decltype(x) model(1);
+    model(0) = 0.5 * M_PI;
+    sm.updataModel(model);
+    sm.setParams(x);
+    sm.feedData(measuredValues);
+    timer.start();
+    int status = sm.solve();
+    x = sm.getParam();
 
-    // Run the LM optimization
-    // Create a LevenbergMarquardt object and pass it the functor.
-    //
 
-    LMFunctor functor;
-    functor.measuredValues = measuredValues;
-    functor.m = m;
-    functor.n = n;
 
-    Eigen::LevenbergMarquardt<LMFunctor, double> lm(functor);
-    int status = lm.minimize(x);
     std::cout << "LM optimization status: " << status << std::endl;
 
-    //
-    // Results
-    // The 'x' vector also contains the results of the optimization.
-    //
     std::cout << "Optimization results" << std::endl;
     std::cout << "\tx0: " << x(0) << std::endl;
     std::cout << "\ty0: " << x(1) << std::endl;
     std::cout << "\tk1: " << x(2) << std::endl;
+    printf("opt time = %f ms\n", timer.elapsedMicroseconds() / 1000);
+    double a, b, c;
+    fit_util::svdfit(LinePoints, a, b, c);
+    printf("svd time = %f ms\n", timer.elapsedMicroseconds() / 1000);
+
+    printf("get line ");
 #endif
     return 0;
 }
