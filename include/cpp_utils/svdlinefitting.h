@@ -8,10 +8,10 @@
 #include <iostream>
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
-#include <opencv2/opencv.hpp>
+#include <cpp_utils/types.h>
 
 
-inline double svdfit(vector <cv::Point2d> points) {
+inline double svdfit(vector <type_util::Point2d> points, double &a, double &b, double &c) {
     using namespace Eigen;
     using namespace std;
 
@@ -89,12 +89,11 @@ inline double svdfit(vector <cv::Point2d> points) {
     cout << "The S^2 is:" << endl << S*S << endl << endl;
     cout << "The min-eigenvector for A^T*A:" << endl << svd.matrixV().col(minColIdx) << endl;
 #endif
-    double a, b, d;
     a = svd.matrixV().col(minColIdx)(0, 0);
     b = svd.matrixV().col(minColIdx)(1, 0);
-    d = a * Pm(0, 0) + b * Pm(1, 0);
-    printf("%f*x + %f*y = %f\n", a, b, d);
-    printf("y = %f*x + %f \n", -a / b, d / b);
+    c = a * Pm(0, 0) + b * Pm(1, 0);
+    printf("%f*x + %f*y = %f\n", a, b, c);
+    printf("y = %f*x + %f \n", -a / b, c / b);
 
 
     double angle = atan2(-a, b);

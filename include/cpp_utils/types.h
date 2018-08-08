@@ -4,7 +4,7 @@
 
 #ifndef LOCATE_REFLECTION_TYPES_H
 #define LOCATE_REFLECTION_TYPES_H
-namespace tupe_util {
+namespace type_util {
     struct Point2d {
         double x;
         double y;

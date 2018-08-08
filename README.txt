@@ -99,3 +99,9 @@ https://github.com/ros-drivers/video_stream_opencv.git
 7.webcam on iphone
 https://github.com/shenyaocn/IP-Camera-Bridge.git
 python test_video_resource.py http://admin:admin@192.168.0.120:8081/video
+
+8.
+https://stackoverflow.com/questions/49993616/multiple-line-detection-in-houghlinesp-opencv-function?rq=1
+https://stackoverflow.com/questions/30746327/get-a-single-line-representation-for-multiple-close-by-lines-clustered-together
+https://stackoverflow.com/questions/25303396/choosing-lines-from-hough-lines
+https://stackoverflow.com/questions/44449871/fine-tuning-hough-line-function-parameters-opencv

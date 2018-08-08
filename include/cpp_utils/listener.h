@@ -118,7 +118,7 @@ namespace rosnode {
     }
 
     inline bool Listener::topicExists(string topic) {
-        if (container::keyExists<string, std::shared_ptr<ros::CallbackQueue>>(callbackqueue_, topic)) {
+        if (container_util::keyExists<string, std::shared_ptr<ros::CallbackQueue>>(callbackqueue_, topic)) {
             return true;
         } else
             return false;
@@ -126,7 +126,7 @@ namespace rosnode {
 
     inline bool Listener::serviceExists(string service_name) {
         //map<string, std::shared_ptr<ros::ServiceClient>>
-        if (container::keyExists<string, std::shared_ptr<ros::ServiceClient>>(servicequeue_, service_name)) {
+        if (container_util::keyExists<string, std::shared_ptr<ros::ServiceClient>>(servicequeue_, service_name)) {
             return true;
         } else
             return false;

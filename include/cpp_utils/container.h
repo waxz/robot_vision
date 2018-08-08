@@ -5,19 +5,21 @@
 #ifndef CATKIN_STARTUP_CONTAINER_H
 #define CATKIN_STARTUP_CONTAINER_H
 
+#include <algorithm>
+#include <iostream>
+#include <iterator>
 #include <vector>
 #include <valarray>
 #include <string>
 #include <map>
 #include <cmath>
 #include <XmlRpc.h>
-#include <ros/ros.h>
 
 using std::vector;
 using std::valarray;
 using std::map;
 using std::string;
-namespace container {
+namespace container_util {
     // convert vector to valarray
     template<class T>
     valarray<T> createValarrayFromVector(vector<T> vec) {
@@ -90,6 +92,41 @@ namespace container {
     }
 
 
+    // source:https://stackoverflow.com/questions/11965732/set-stdvectorint-to-a-range
+    template<class OutputIterator, class Size, class Assignable>
+    void iota_n(OutputIterator first, Size n, Assignable value) {
+        std::generate_n(first, n, [&value]() {
+            return value++;
+        });
+    }
+
+    vector<int> createRangeVector(int size, int start) {
+        vector<int> v;
+        v.reserve(size);
+        iota_n(std::back_inserter(v), size, start); // fill them with 3...16
+        return v;
+
+
+    }
+
+    valarray<int> createRangeValarray(int size, int start) {
+        auto vec = createRangeVector(size, start);
+        valarray<int> val = createValarrayFromVector(vec);
+        return val;
+
+    }
+
+    /*
+
+    std::vector<int> v;                   // no default init
+    v.reserve(14);                        // allocate 14 ints
+    iota_n(std::back_inserter(v), 14, 3); // fill them with 3...16
+
+    std::for_each(v.begin(), v.end(), [](int const& elem) {
+        std::cout << elem << "\n";
+    });
+
+     */
 }
 
 

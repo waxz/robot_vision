@@ -1,142 +1,183 @@
 //
 // Created by waxz on 18-8-2.
 //
-#include <Eigen/Dense>
-#include <Eigen/Sparse>
-#include <opencv2/core/core.hpp>
-#include <opencv2/highgui/highgui.hpp>
-#include "opencv2/imgproc/imgproc.hpp"
-
-#include <unsupported/Eigen/NonLinearOptimization>
-
-typedef std::vector<Eigen::Vector2d, Eigen::aligned_allocator<Eigen::Vector2d> > Point2DVector;
-
-
-#include <string>
-#include <iostream>
-#include <vector>
+#include <cpp_utils/levmarq.h>
 #include <cpp_utils/time.h>
+#include <cpp_utils/listener.h>
+#include <cpp_utils/parse.h>
+#include <cpp_utils/types.h>
+#include <cpp_utils/container.h>
+#include <sensor_msgs/LaserScan.h>
+#include <ros/ros.h>
 
+#include <vector>
+#include <valarray>
 using std::cout;
 using std::endl;
 using std::vector;
+using std::valarray;
 
-// generator
-// given 3 parameter [x0,y0,yaw1], (x,y) as turn point, yaw as one side angle
-// for x<x0, y = k1x+b, for x>x0 , y= k2x+b
-Point2DVector SampleGen(double start, double end, int num) {
-    double x0, y0, k1, k2, angle;
-    // line function ax + by = c
-    angle = 0.5 * M_PI;
-    k1 = 0.3;
-    k2 = -0.3;//-1;tan(atan(k1+angle));
-    x0 = 0.0;
-    y0 = 1.1;
-
-    // sample range
-    Point2DVector points;
-
-    for (int cnt = 0; cnt < num; cnt++) {
-        double random_ratio = 0.4;
-        double x = static_cast<double>(start + cnt * (end - start) / num );
-        Eigen::Vector2d point;
-        point(0) = x;
-        double noise = random_ratio * drand48() / 10.0;
-        point(1) = (x > x0) ? y0 + (x - x0) * k1 : y0 + (x - x0) * k2;
-        //2.0 * x + 5.0 + drand48() / 10.0;
-        points.push_back(point);
-
-
-    }
-
-
-    return points;
-
-
-}
-
-struct LMFunctor {
-    // 'm' pairs of (x, f(x))
-    Eigen::MatrixXd measuredValues;
-
-    // Compute 'm' errors, one for each data point, for the given parameter values in 'x'
-    int operator()(const Eigen::VectorXd &x, Eigen::VectorXd &fvec) const {
-        // 'x' has dimensions n x 1
-        // It contains the current estimates for the parameters.
-
-        // 'fvec' has dimensions m x 1
-        // It will contain the error for each data point.
-
-        double x0 = x(0);
-        double y0 = x(1);
-        double k1 = x(2);
-
-        double k2, angle;
-        angle = 0.6 * M_PI;
-        k2 = tan(atan(k1 + angle));
-
-        for (int i = 0; i < values(); i++) {
-            double xValue = measuredValues(i, 0);
-            double yValue = measuredValues(i, 1);
-
-            fvec(i) = yValue - ((xValue > x0) ? y0 + (xValue - x0) * k1 : y0 + (xValue - x0) * k2);
-        }
-        return 0;
-    }
-
-    // Compute the jacobian of the errors
-    int df(const Eigen::VectorXd &x, Eigen::MatrixXd &fjac) const {
-        // 'x' has dimensions n x 1
-        // It contains the current estimates for the parameters.
-
-        // 'fjac' has dimensions m x n
-        // It will contain the jacobian of the errors, calculated numerically in this case.
-
-        double epsilon;
-        epsilon = 1e-5f;
-
-        for (int i = 0; i < x.size(); i++) {
-            Eigen::VectorXd xPlus(x);
-            xPlus(i) += epsilon;
-            Eigen::VectorXd xMinus(x);
-            xMinus(i) -= epsilon;
-
-            Eigen::VectorXd fvecPlus(values());
-            operator()(xPlus, fvecPlus);
-
-            Eigen::VectorXd fvecMinus(values());
-            operator()(xMinus, fvecMinus);
-
-            Eigen::VectorXd fvecDiff(values());
-            fvecDiff = (fvecPlus - fvecMinus) / (2.0f * epsilon);
-
-            fjac.block(0, i, values(), 1) = fvecDiff;
-        }
-
-        return 0;
-    }
-
-    // Number of data points, i.e. values.
-    int m;
-
-    // Returns 'm', the number of values.
-    int values() const { return m; }
-
-    // The number of parameters, i.e. inputs.
-    int n;
-
-    // Returns 'n', the number of inputs.
-    int inputs() const { return n; }
-
-};
-
+namespace sm=sensor_msgs;
 int main(int argc, char **argv) {
+
+
+#if 0
+    ros::init(argc,argv,"test");
+    ros::NodeHandle nh;
+    ros::NodeHandle nh_pravite("~");
+    rosnode::Listener l(nh,nh_pravite);
+    std::shared_ptr<sm::LaserScan> scan_data__;
+    string scan_topic_ = "/scan";
+    auto res = l.createSubcriber<sm::LaserScan>(scan_topic_,1);
+
+    scan_data__ = std::get<0>(res);
+
+    l.getOneMessage(scan_topic_, -1);
+
+    ROS_INFO_STREAM("ranges"<<(*scan_data__).header);
+
+    // laser to mat
+    // first remove independent points
+    auto laserRanges = container_util::createValarrayFromVector((*scan_data__).ranges);
+    auto size = (*scan_data__).ranges.size();
+    valarray<float> laserAngles(size);
+    float angle_min = (*scan_data__).angle_min;
+    float incre = (*scan_data__).angle_increment;
+    for(int i=0;i<size;i++){
+        laserAngles[i] = angle_min+i*incre;
+    }
+
+    valarray<float> laserXs = laserRanges*cos(laserAngles);
+    valarray<float> laserYs = laserRanges*sin(laserAngles);
+
+
+
+    // filter
+    // range filter [range_min,range_max]
+    float range_filter_min_ = 0.1;
+    float range_filter_max_ = 2.0;
+
+    valarray<bool> mask = laserRanges>range_filter_min_ && laserRanges<range_filter_max_;
+
+    valarray<float> maskXs = laserXs[mask];
+    valarray<float> maskYs = laserYs[mask];
+    size = maskYs.size();
+
+    valarray<float> maskXsL = maskXs[std::slice(0, size - 1, 1)];
+    valarray<float> maskXsR = maskXs[std::slice(1, size - 1, 1)];
+
+    valarray<float> maskYsL = maskYs[std::slice(0, size - 1, 1)];
+    valarray<float> maskYsR = maskYs[std::slice(1, size - 1, 1)];
+
+    // get distance sequence
+    valarray<float> distance = sqrt(pow(maskXsR - maskXsL, 2) + pow(maskYsR - maskYsL, 2));
+
+    float edgeMin_ = 0.05;
+
+    mask = distance>edgeMin_;
+    auto Ids = container_util::createRangeValarray(distance.size(),0);
+    valarray<int> edgeIds = Ids[mask];
+//    valarray<float> edgeXs = maskXsL[mask];
+//    valarray<float> edgeYs = maskYsL[mask];
+    size = edgeIds.size();
+    valarray<int> edgeIdL = edgeIds[std::slice(0, size - 1, 1)];
+    valarray<int> edgeIdR = edgeIds[std::slice(1, size - 1, 1)];
+    auto edgeDist = edgeIdR - edgeIdL;
+
+    // push all point to a vector
+    vector<type_util::Point2d> continiousPoints;
+    int distMin_ = 5;
+    vector<float> continiousPointsYs;
+
+    vector<float> continiousPointsXs;
+    double x,y;
+    type_util::Point2d p;
+    for(int i=0;i<edgeDist.size();i++){
+        if(edgeDist[i]>distMin_){
+            for(int j = edgeIds[i]+1;j<edgeIds[i+1];j++){
+
+                p.x =  maskXsL[j];
+                p.y = maskYsL[j];
+                continiousPointsXs.push_back(p.x);
+                continiousPointsYs.push_back(p.y);
+
+                continiousPoints.push_back(p);
+            }
+        }
+    }
+
+    // find xmax,xmin,ymax,ymin
+    auto continiousPointsXs_tmp = container_util::createValarrayFromVector(continiousPointsXs);
+    auto continiousPointsYs_tmp = container_util::createValarrayFromVector(continiousPointsYs);
+    double normXmin, normYmin, normXmax,normYmax;
+    normXmin = continiousPointsXs_tmp.min();
+    normXmax = continiousPointsXs_tmp.max();
+    normYmin = continiousPointsYs_tmp.min();
+    normYmax = continiousPointsYs_tmp.max();
+    double normXlen = normXmax - normXmin;
+    double normYlen = normYmax - normYmin;
+
+
+    int resolution_ = 100;
+    int width = int(100*(normXmax - normXmin));
+    int height = int(100*(normYmax - normYmin));
+
+
+    cv::Mat grid(height, width, CV_8U,255);
+
+    size = continiousPoints.size();
+    int idx ,idy;
+    for(int i=0;i<size;i++){
+
+        idx = std::max(0,int((continiousPoints[i].x-normXmin )*(width-1)/normXlen));
+        idy = std::max(0,int((continiousPoints[i].y-normYmin )*(height-1)/normYlen));
+
+        grid.at<uchar>(idx, idy) = 0;
+
+
+    }
+    // convert point to Mat
+
+
+    cv::imshow("source", grid);
+
+#endif
+
+
+
+
+
+    // finally get [startId,endId] vector
+
+
+    //push all points to SelectPoints
+
+    // convert selectPoints to Mat
+
+
+
+
+
+
+
+    // window filter
+
+
+
+    // select region
+    // convert to Mat
+    // normalise range
+
+
+
+
+#if 1
     time_util::Timer timer;
     timer.start();
 
     // 'm' is the number of data points.
     int m = 100;
-    Point2DVector Points = SampleGen(-1, 1, m);
+    Point2DVector Points = opt_util::SampleGen(-1, 1, m);
 
     // laser scan to grid
 
@@ -149,54 +190,60 @@ int main(int argc, char **argv) {
         // convert points to index
         double x = Points[i](0);
         double y = Points[i](1);
-        printf("x,y = %d, [%.3f,%.3f]\n", i, x, y);
+//        printf("x,y = %d, [%.3f,%.3f]\n", i, x, y);
 
         int idxi = int(x * 100) + 0.5 * grid.cols;
         int idxj = int(y * 100) + 0.5 * grid.rows;
-        printf("idxi,idxj = [%d,%d]\n", idxi, idxj);
-
-
-#if 0
-        int w = 4;
-        for(int d =0 ;d<w;d++){
-
-            for(int k=0;k<w;k++){
-                grid.at<uchar>(idxi-d,idxj-k) = 255;
-                grid.at<uchar>(idxi+d,idxj+k) = 255;
-            }
+//        printf("idxi,idxj = [%d,%d]\n", idxi, idxj);
 
 
 
-        }
-#endif
         grid.at<uchar>(idxj, idxi) = 0;
 
     }
+    printf("point to mat time %f ms\n", timer.elapsedMicroseconds() / 1000.0);
+
+
     cv::Mat cdst;
     cv::Mat dst = grid.clone();
 
     //Apply blur to smooth edges and use adapative thresholding
     cv::Size size(3, 3);
-    cv::GaussianBlur(dst, dst, size, 0);
-    adaptiveThreshold(dst, dst, 255, CV_ADAPTIVE_THRESH_MEAN_C, CV_THRESH_BINARY, 75, 10);
+    cv::GaussianBlur(dst, dst, size, 5);
 
 
-    cv::dilate(dst, dst, 0, cv::Point(-1, -1), 2, 1, 1);
+    adaptiveThreshold(dst, dst, 255, CV_ADAPTIVE_THRESH_MEAN_C, cv::THRESH_BINARY, 15, 10);
+    printf("adaptiveThreshold time %f ms\n", timer.elapsedMicroseconds() / 1000.0);
+
     cv::bitwise_not(dst, dst);
+    printf("bitwise_not time %f ms\n", timer.elapsedMicroseconds() / 1000.0);
+
+    auto kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
 
 
-//    Canny(grid, dst, 50, 200, 3);
+    decltype(dst) dilateMat;
+    cv::dilate(dst, dilateMat, kernel, cv::Point(-1, -1), 1);
+    printf("dilate time %f ms\n", timer.elapsedMicroseconds() / 1000.0);
 
-    cvtColor(dst, cdst, CV_GRAY2BGR);
+
+    decltype(dst) erodeMat;
+
+    auto kernel2 = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5));
+    cv::erode(dilateMat, erodeMat, kernel2, cv::Point(-1, -1), 1);
+    printf("erode time %f ms\n", timer.elapsedMicroseconds() / 1000.0);
+
+
+    cvtColor(erodeMat, cdst, CV_GRAY2BGR);
 
     vector<cv::Vec4i> lines;
 
-    HoughLinesP(dst, lines, 1, CV_PI / 50, 50, 80, 1);
+
+    HoughLinesP(dst, lines, 1, CV_PI / 100, 50, 80, 1);
 
     int sz = int(lines.size());
     printf("get line = %d\n", sz);
 #if 0
-    cv::Vec4i l = lines[0];
+    cv::Vec4i l = lines[1];
     cv::line( cdst, cv::Point(l[0], l[1]), cv::Point(l[2], l[3]), cv::Scalar(0,0,255), 1, CV_AA);
 #endif
 #if 1
@@ -210,11 +257,17 @@ int main(int argc, char **argv) {
     printf("time %f ms\n", timer.elapsedMicroseconds() / 1000.0);
     cout << endl;
     cv::imshow("source", grid);
+    cv::imshow("dst", dst);
+
+    cv::imshow("dilateMat", dilateMat);
+    cv::imshow("erodeMat", erodeMat);
 
     cv::imshow("detected lines", cdst);
 
-#if 0
+
 #endif
+
+
     cv::waitKey();
 
 

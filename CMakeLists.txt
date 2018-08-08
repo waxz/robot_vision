@@ -34,6 +34,8 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   sensor_msgs
   std_msgs
+        rosbag
+        tf
 )
 
 find_package(OpenCV REQUIRED)
@@ -161,11 +163,14 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
+set(yaml_lib include/yaml/Yaml.cpp)
+
 add_executable(${PROJECT_NAME}_node src/opencv_test.cpp)
 
 add_executable(gui src/gui.cpp)
-add_executable(opt src/opt.cpp)
+add_executable(opt src/opt.cpp ${yaml_lib})
 add_executable(lsd src/lsd.cpp)
+
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -178,12 +183,15 @@ add_executable(lsd src/lsd.cpp)
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
+
 target_link_libraries(${PROJECT_NAME}_node
    ${OpenCV_LIBRARIES}
    ${catkin_LIBRARIES}
 )
 target_link_libraries(gui ${OpenCV_LIBRARIES})
-target_link_libraries(opt ${OpenCV_LIBRARIES})
+target_link_libraries(opt
+        ${catkin_LIBRARIES}
+        ${OpenCV_LIBRARIES})
 target_link_libraries(lsd ${OpenCV_LIBRARIES})
 
 #############
